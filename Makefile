@@ -129,3 +129,16 @@ release-skip-tests quick-release:
 	KUBE_RELEASE_RUN_TESTS=n build/release.sh
 .PHONY: release-skip-tests quick-release
 
+gb-all:
+	#go get -u github.com/constabulary/gb/...
+	rm -rf _gb  #FIXME:remove
+	mkdir -p _output/local/go/{bin,pkg}
+	mkdir -p _gb/src/k8s.io
+	ln -s ../../../ _gb/src/k8s.io/kubernetes
+	ln -s ../Godeps/_workspace/ _gb/vendor
+	ln -s ../_output/local/go/bin _gb/bin
+	ln -s ../_output/local/go/pkg _gb/pkg
+	gb build -R _gb k8s.io/kubernetes/cmd/kube-proxy
+	# build ... doesn't work with symlinks yet.
+
+
