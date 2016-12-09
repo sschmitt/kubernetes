@@ -475,9 +475,10 @@ function create-node-template() {
   # TODO(zmerlynn): To make this really robust, we need to parse the output and
   #                 add retries. Just relying on a non-zero exit code doesn't
   #                 distinguish an ephemeral failed call from a "not-exists".
-  if gcloud compute instance-templates describe "$template_name" --project "${PROJECT}" &>/dev/null; then
+  # IP-aliasing prototypes.
+  if gcloud alpha compute instance-templates describe "$template_name" --project "${PROJECT}" &>/dev/null; then
     echo "Instance template ${1} already exists; deleting." >&2
-    if ! gcloud compute instance-templates delete "$template_name" --project "${PROJECT}" &>/dev/null; then
+    if ! gcloud alpha compute instance-templates delete "$template_name" --project "${PROJECT}" &>/dev/null; then
       echo -e "${color_yellow}Failed to delete existing instance template${color_norm}" >&2
       exit 2
     fi
@@ -490,18 +491,20 @@ function create-node-template() {
   fi
   while true; do
     echo "Attempt ${attempt} to create ${1}" >&2
-    if ! gcloud compute instance-templates create "$template_name" \
+    # IP-aliasing prototypes.
+    if ! gcloud alpha compute instance-templates create "$template_name" \
       --project "${PROJECT}" \
+      --region "${REGION}" \
       --machine-type "${NODE_SIZE}" \
       --boot-disk-type "${NODE_DISK_TYPE}" \
       --boot-disk-size "${NODE_DISK_SIZE}" \
       --image-project="${NODE_IMAGE_PROJECT}" \
       --image "${NODE_IMAGE}" \
       --tags "${NODE_TAG}" \
-      --network "${NETWORK}" \
       ${preemptible_minions} \
       $2 \
-      --can-ip-forward \
+      --no-can-ip-forward \
+      --network-interface=subnet="${SUBNETWORK}",aliases=podips:/24 \
       --metadata-from-file $(echo ${@:3} | tr ' ' ',') >&2; then
         if (( attempt > 5 )); then
           echo -e "${color_red}Failed to create instance template $template_name ${color_norm}" >&2
@@ -514,7 +517,8 @@ function create-node-template() {
         # In case the previous attempt failed with something like a
         # Backend Error and left the entry laying around, delete it
         # before we try again.
-        gcloud compute instance-templates delete "$template_name" --project "${PROJECT}" &>/dev/null || true
+        # IP-aliasing prototypes.
+        gcloud alpha compute instance-templates delete "$template_name" --project "${PROJECT}" &>/dev/null || true
     else
         break
     fi
@@ -648,10 +652,18 @@ function check-existing() {
 
 function create-network() {
   if ! gcloud compute networks --project "${PROJECT}" describe "${NETWORK}" &>/dev/null; then
+    # IP-aliasing prototype.
     echo "Creating new network: ${NETWORK}"
     # The network needs to be created synchronously or we have a race. The
     # firewalls can be added concurrent with instance creation.
-    gcloud compute networks create --project "${PROJECT}" "${NETWORK}" --range "10.240.0.0/16"
+    gcloud compute networks create --project "${PROJECT}" "${NETWORK}" --mode=auto
+
+    echo "Creating new subnetwork: ${SUBNETWORK}"
+    gcloud alpha compute networks subnets create --project "${PROJECT}" "${SUBNETWORK}" \
+      --network="${NETWORK}" \
+      --region "${REGION}" \
+      --range="10.64.0.0/14" \
+      --secondary-range=name=podips,range="${CLUSTER_IP_RANGE}"
   fi
 
   if ! gcloud compute firewall-rules --project "${PROJECT}" describe "${CLUSTER_NAME}-default-internal-master" &>/dev/null; then
@@ -694,6 +706,11 @@ function delete-firewall-rules() {
 
 function delete-network() {
   if [[ -n $(gcloud compute networks --project "${PROJECT}" describe "${NETWORK}" --format='value(name)' 2>/dev/null || true) ]]; then
+    # IP-aliasing prototype.
+    if ! gcloud alpha compute networks subnets delete --project "${PROJECT}" --quiet "${SUBNETWORK}" --region="${REGION}"; then
+      echo "Failed to delete subnetwork '${SUBNETWORK}'."
+      return 1
+    fi
     if ! gcloud compute networks delete --project "${PROJECT}" --quiet "${NETWORK}"; then
       echo "Failed to delete network '${NETWORK}'. Listing firewall-rules:"
       gcloud compute firewall-rules --project "${PROJECT}" list --filter="network=${NETWORK}"
@@ -1318,8 +1335,9 @@ function kube-down() {
     }
 
     for template in ${templates[@]:-}; do
-      if gcloud compute instance-templates describe --project "${PROJECT}" "${template}" &>/dev/null; then
-        gcloud compute instance-templates delete \
+      # IP-aliasing prototypes.
+      if gcloud alpha compute instance-templates describe --project "${PROJECT}" "${template}" &>/dev/null; then
+        gcloud alpha compute instance-templates delete \
           --project "${PROJECT}" \
           --quiet \
           "${template}"

@@ -77,22 +77,22 @@ function create-master-instance-internal() {
     preemptible_master="--preemptible --maintenance-policy TERMINATE"
   fi
 
-  gcloud compute instances create "${master_name}" \
-    ${address_option} \
+  # IP-aliasing prototypes.
+  gcloud alpha compute instances create "${master_name}" \
     --project "${PROJECT}" \
     --zone "${ZONE}" \
     --machine-type "${MASTER_SIZE}" \
     --image-project="${MASTER_IMAGE_PROJECT}" \
     --image "${MASTER_IMAGE}" \
     --tags "${MASTER_TAG}" \
-    --network "${NETWORK}" \
     --scopes "storage-ro,compute-rw,monitoring,logging-write" \
-    --can-ip-forward \
+    --no-can-ip-forward \
     --metadata-from-file \
       "kube-env=${KUBE_TEMP}/master-kube-env.yaml,user-data=${KUBE_ROOT}/cluster/gce/gci/master.yaml,configure-sh=${KUBE_ROOT}/cluster/gce/gci/configure.sh,cluster-name=${KUBE_TEMP}/cluster-name.txt,gci-update-strategy=${KUBE_TEMP}/gci-update.txt,gci-ensure-gke-docker=${KUBE_TEMP}/gci-ensure-gke-docker.txt,gci-docker-version=${KUBE_TEMP}/gci-docker-version.txt" \
     --disk "name=${master_name}-pd,device-name=master-pd,mode=rw,boot=no,auto-delete=no" \
     --boot-disk-size "${MASTER_ROOT_DISK_SIZE:-10}" \
-    ${preemptible_master}
+    ${preemptible_master} \
+    --network-interface=subnet="${SUBNETWORK}",aliases=podips:/24
 }
 
 function get-metadata() {
