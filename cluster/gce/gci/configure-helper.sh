@@ -944,10 +944,11 @@ function start-kube-controller-manager {
   if [[ -n "${SERVICE_CLUSTER_IP_RANGE:-}" ]]; then
     params+=" --service-cluster-ip-range=${SERVICE_CLUSTER_IP_RANGE}"
   fi
+  # IP-aliasing prototype.
   if [[ "${NETWORK_PROVIDER:-}" == "kubenet" ]]; then
-    params+=" --allocate-node-cidrs=true"
+    params+=" --allocate-node-cidrs=false"
   elif [[ -n "${ALLOCATE_NODE_CIDRS:-}" ]]; then
-    params+=" --allocate-node-cidrs=${ALLOCATE_NODE_CIDRS}"
+    params+=" --allocate-node-cidrs=false"
   fi
   if [[ -n "${TERMINATED_POD_GC_THRESHOLD:-}" ]]; then
     params+=" --terminated-pod-gc-threshold=${TERMINATED_POD_GC_THRESHOLD}"
