@@ -257,6 +257,9 @@ func (kl *Kubelet) initialNode() (*v1.Node, error) {
 		}
 		node.Spec.ExternalID = externalID
 
+		// FIXME: Set CIDR.
+		node.Spec.PodCIDR = "10.0.0.0/24"
+
 		// TODO: We can't assume that the node has credentials to talk to the
 		// cloudprovider from arbitrary nodes. At most, we should talk to a
 		// local metadata server here.
