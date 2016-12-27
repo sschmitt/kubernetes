@@ -32,7 +32,7 @@ source "${KUBE_ROOT}/cluster/gce/gci/helper.sh"
 #   get-bearer-token
 function create-master-instance {
   local address_opt=""
-  [[ -n ${1:-} ]] && address_opt="--address ${1}"
+  [[ -n ${1:-} ]] && address_opt="${1}"
 
   write-master-env
   ensure-gci-metadata-files
@@ -70,7 +70,7 @@ function replicate-master-instance() {
 
 function create-master-instance-internal() {
   local -r master_name="${1}"
-  local -r address_option="${2:-}"
+  local -r external_address="${2:-}"
 
   local preemptible_master=""
   if [[ "${PREEMPTIBLE_MASTER:-}" == "true" ]]; then
@@ -92,7 +92,7 @@ function create-master-instance-internal() {
     --disk "name=${master_name}-pd,device-name=master-pd,mode=rw,boot=no,auto-delete=no" \
     --boot-disk-size "${MASTER_ROOT_DISK_SIZE:-10}" \
     ${preemptible_master} \
-    --network-interface=subnet="${SUBNETWORK}",aliases=podips:/24
+    --network-interface="address=${external_address},subnet=${SUBNETWORK},aliases=podips:/24"
 }
 
 function get-metadata() {

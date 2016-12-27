@@ -504,7 +504,7 @@ function create-node-template() {
       ${preemptible_minions} \
       $2 \
       --no-can-ip-forward \
-      --network-interface=subnet="${SUBNETWORK}",aliases=podips:/24 \
+      --network-interface="address=,subnet=${SUBNETWORK},aliases=podips:/24" \
       --metadata-from-file $(echo ${@:3} | tr ' ' ',') >&2; then
         if (( attempt > 5 )); then
           echo -e "${color_red}Failed to create instance template $template_name ${color_norm}" >&2
@@ -652,17 +652,22 @@ function check-existing() {
 
 function create-network() {
   if ! gcloud compute networks --project "${PROJECT}" describe "${NETWORK}" &>/dev/null; then
-    # IP-aliasing prototype.
     echo "Creating new network: ${NETWORK}"
     # The network needs to be created synchronously or we have a race. The
     # firewalls can be added concurrent with instance creation.
-    gcloud compute networks create --project "${PROJECT}" "${NETWORK}" --mode=auto
+    gcloud compute networks create "${NETWORK}" \
+      --project "${PROJECT}" \
+      --mode=auto
+  fi
 
+  if ! gcloud alpha compute networks subnets --project "${PROJECT}" --region "${REGION}" describe "${SUBNETWORK}" &>/dev/null; then
+    # IP-aliasing prototype.
     echo "Creating new subnetwork: ${SUBNETWORK}"
-    gcloud alpha compute networks subnets create --project "${PROJECT}" "${SUBNETWORK}" \
-      --network="${NETWORK}" \
+    gcloud alpha compute networks subnets create "${SUBNETWORK}" \
+      --project "${PROJECT}" \
       --region "${REGION}" \
-      --range="10.64.0.0/14" \
+      --network="${NETWORK}" \
+      --range="${NODE_IP_RANGE}" \
       --secondary-range=name=podips,range="${CLUSTER_IP_RANGE}"
   fi
 

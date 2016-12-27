@@ -65,9 +65,11 @@ ETCD_QUORUM_READ="${ENABLE_ETCD_QUORUM_READ:-false}"
 MASTER_TAG="${INSTANCE_PREFIX}-master"
 NODE_TAG="${INSTANCE_PREFIX}-minion"
 # IP-aliasing prototype
-# TODO: With subnets, it cannot collide with 10.128.0.0/9 default subnets.
-CLUSTER_IP_RANGE="${CLUSTER_IP_RANGE:-10.0.0.0/14}"
-MASTER_IP_RANGE="${MASTER_IP_RANGE:-10.246.0.0/24}"
+# TODO: With subnets and auto mode, we can't use 10.128.0.0/9.
+NODE_IP_RANGE="${NODE_IP_RANGE:-10.127.254.0/24}"   # VM IPs
+# FIXME: rename CLUSTER_IP_RANGE to POD_IP_RANGE globally
+CLUSTER_IP_RANGE="${CLUSTER_IP_RANGE:-10.1.0.0/16}" # Pod IPs (including on master)
+MASTER_IP_RANGE="${MASTER_IP_RANGE:-10.1.0.0/24}"   # The first /24 is broken for aliases
 RUNTIME_CONFIG="${KUBE_RUNTIME_CONFIG:-}"
 
 # Optional: set feature gates
