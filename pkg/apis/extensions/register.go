@@ -63,8 +63,6 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&ReplicaSetList{},
 		&PodSecurityPolicy{},
 		&PodSecurityPolicyList{},
-		&NetworkPolicy{},
-		&NetworkPolicyList{},
 	)
 	return nil
 }

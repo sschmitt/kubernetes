@@ -20,6 +20,7 @@ package internalversion
 
 import (
 	"fmt"
+
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	cache "k8s.io/client-go/tools/cache"
 	api "k8s.io/kubernetes/pkg/api"
@@ -129,8 +130,6 @@ func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Extensions().InternalVersion().Deployments().Informer()}, nil
 	case extensions.SchemeGroupVersion.WithResource("ingresses"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Extensions().InternalVersion().Ingresses().Informer()}, nil
-	case extensions.SchemeGroupVersion.WithResource("networkpolicies"):
-		return &genericInformer{resource: resource.GroupResource(), informer: f.Extensions().InternalVersion().NetworkPolicies().Informer()}, nil
 	case extensions.SchemeGroupVersion.WithResource("podsecuritypolicies"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Extensions().InternalVersion().PodSecurityPolicies().Informer()}, nil
 	case extensions.SchemeGroupVersion.WithResource("replicasets"):
