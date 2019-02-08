@@ -114,6 +114,17 @@ func getPublicIPDomainNameLabel(service *v1.Service) string {
 	return ""
 }
 
+func filterNodes(nodes []*v1.Node) []*v1.Node {
+	out := make([]*v1.Node, 0, len(nodes))
+	for _, n := range nodes {
+		if n.Spec.Unschedulable {
+			continue
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
 // EnsureLoadBalancer creates a new load balancer 'name', or updates the existing one. Returns the status of the balancer
 func (az *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, service *v1.Service, nodes []*v1.Node) (*v1.LoadBalancerStatus, error) {
 	// When a client updates the internal load balancer annotation,
@@ -121,6 +132,9 @@ func (az *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, ser
 	// Here we'll firstly ensure service do not lie in the opposite LB.
 	serviceName := getServiceName(service)
 	klog.V(5).Infof("ensureloadbalancer(%s): START clusterName=%q", serviceName, clusterName)
+
+	// Filter out nodes we don't want in the LB
+	nodes = filterNodes(nodes)
 
 	lb, err := az.reconcileLoadBalancer(clusterName, service, nodes, true /* wantLb */)
 	if err != nil {
@@ -722,7 +736,7 @@ func (az *Cloud) reconcileLoadBalancer(clusterName string, service *v1.Service, 
 
 			newConfigs = append(newConfigs,
 				network.FrontendIPConfiguration{
-					Name:                                    to.StringPtr(lbFrontendIPConfigName),
+					Name: to.StringPtr(lbFrontendIPConfigName),
 					FrontendIPConfigurationPropertiesFormat: fipConfigurationProperties,
 				})
 			klog.V(10).Infof("reconcileLoadBalancer for service (%s)(%t): lb frontendconfig(%s) - adding", serviceName, wantLb, lbFrontendIPConfigName)
@@ -1055,8 +1069,8 @@ func (az *Cloud) reconcileSecurityGroup(clusterName string, service *v1.Service,
 						DestinationPortRange:     to.StringPtr(strconv.Itoa(int(port.Port))),
 						SourceAddressPrefix:      to.StringPtr(sourceAddressPrefixes[j]),
 						DestinationAddressPrefix: to.StringPtr(destinationIPAddress),
-						Access:                   network.SecurityRuleAccessAllow,
-						Direction:                network.SecurityRuleDirectionInbound,
+						Access:    network.SecurityRuleAccessAllow,
+						Direction: network.SecurityRuleDirectionInbound,
 					},
 				}
 			}
@@ -1256,8 +1270,8 @@ func makeConsolidatable(rule network.SecurityRule) network.SecurityRule {
 			SourceAddressPrefix:        rule.SourceAddressPrefix,
 			SourceAddressPrefixes:      rule.SourceAddressPrefixes,
 			DestinationAddressPrefixes: collectionOrSingle(rule.DestinationAddressPrefixes, rule.DestinationAddressPrefix),
-			Access:                     rule.Access,
-			Direction:                  rule.Direction,
+			Access:    rule.Access,
+			Direction: rule.Direction,
 		},
 	}
 }
@@ -1278,8 +1292,8 @@ func consolidate(existingRule network.SecurityRule, newRule network.SecurityRule
 			SourceAddressPrefix:        existingRule.SourceAddressPrefix,
 			SourceAddressPrefixes:      existingRule.SourceAddressPrefixes,
 			DestinationAddressPrefixes: destinations,
-			Access:                     existingRule.Access,
-			Direction:                  existingRule.Direction,
+			Access:    existingRule.Access,
+			Direction: existingRule.Direction,
 		},
 	}
 }

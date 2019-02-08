@@ -3377,6 +3377,17 @@ func buildListener(port v1.ServicePort, annotations map[string]string, sslPorts 
 	return listener, nil
 }
 
+func filterNodes(nodes []*v1.Node) []*v1.Node {
+	out := make([]*v1.Node, 0, len(nodes))
+	for _, n := range nodes {
+		if n.Spec.Unschedulable {
+			continue
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
 // EnsureLoadBalancer implements LoadBalancer.EnsureLoadBalancer
 func (c *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, apiService *v1.Service, nodes []*v1.Node) (*v1.LoadBalancerStatus, error) {
 	annotations := apiService.Annotations
@@ -3391,6 +3402,9 @@ func (c *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, apiS
 	if len(apiService.Spec.Ports) == 0 {
 		return nil, fmt.Errorf("requested load balancer with no ports")
 	}
+
+	// Filter out nodes we don't want in the LB
+	nodes = filterNodes(nodes)
 
 	// Figure out what mappings we want on the load balancer
 	listeners := []*elb.Listener{}
@@ -4293,6 +4307,9 @@ func (c *Cloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName strin
 
 // UpdateLoadBalancer implements LoadBalancer.UpdateLoadBalancer
 func (c *Cloud) UpdateLoadBalancer(ctx context.Context, clusterName string, service *v1.Service, nodes []*v1.Node) error {
+	// Filter out nodes we don't want in the LB
+	nodes = filterNodes(nodes)
+
 	instances, err := c.findInstancesForELB(nodes)
 	if err != nil {
 		return err

@@ -105,6 +105,17 @@ func (g *Cloud) GetLoadBalancerName(ctx context.Context, clusterName string, svc
 	return cloudprovider.DefaultLoadBalancerName(svc)
 }
 
+func filterNodes(nodes []*v1.Node) []*v1.Node {
+	out := make([]*v1.Node, 0, len(nodes))
+	for _, n := range nodes {
+		if n.Spec.Unschedulable {
+			continue
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
 // EnsureLoadBalancer is an implementation of LoadBalancer.EnsureLoadBalancer.
 func (g *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, svc *v1.Service, nodes []*v1.Node) (*v1.LoadBalancerStatus, error) {
 	loadBalancerName := g.GetLoadBalancerName(ctx, clusterName, svc)
@@ -115,6 +126,9 @@ func (g *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, svc 
 	}
 
 	klog.V(4).Infof("EnsureLoadBalancer(%v, %v, %v, %v, %v): ensure %v loadbalancer", clusterName, svc.Namespace, svc.Name, loadBalancerName, g.region, desiredScheme)
+
+	// Filter out nodes we don't want in the LB
+	nodes = filterNodes(nodes)
 
 	existingFwdRule, err := g.GetRegionForwardingRule(loadBalancerName, g.region)
 	if err != nil && !isNotFound(err) {
@@ -164,6 +178,9 @@ func (g *Cloud) UpdateLoadBalancer(ctx context.Context, clusterName string, svc 
 	}
 
 	klog.V(4).Infof("UpdateLoadBalancer(%v, %v, %v, %v, %v): updating with %d nodes", clusterName, svc.Namespace, svc.Name, loadBalancerName, g.region, len(nodes))
+
+	// Filter out nodes we don't want in the LB
+	nodes = filterNodes(nodes)
 
 	switch scheme {
 	case cloud.SchemeInternal:

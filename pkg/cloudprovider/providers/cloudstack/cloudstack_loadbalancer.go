@@ -64,6 +64,17 @@ func (cs *CSCloud) GetLoadBalancer(ctx context.Context, clusterName string, serv
 	return status, true, nil
 }
 
+func filterNodes(nodes []*v1.Node) []*v1.Node {
+	out := make([]*v1.Node, 0, len(nodes))
+	for _, n := range nodes {
+		if n.Spec.Unschedulable {
+			continue
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
 // EnsureLoadBalancer creates a new load balancer, or updates the existing one. Returns the status of the balancer.
 func (cs *CSCloud) EnsureLoadBalancer(ctx context.Context, clusterName string, service *v1.Service, nodes []*v1.Node) (status *v1.LoadBalancerStatus, err error) {
 	klog.V(4).Infof("EnsureLoadBalancer(%v, %v, %v, %v, %v, %v)", clusterName, service.Namespace, service.Name, service.Spec.LoadBalancerIP, service.Spec.Ports, nodes)
@@ -71,6 +82,9 @@ func (cs *CSCloud) EnsureLoadBalancer(ctx context.Context, clusterName string, s
 	if len(service.Spec.Ports) == 0 {
 		return nil, fmt.Errorf("requested load balancer with no ports")
 	}
+
+	// Filter out nodes we don't want in the LB
+	nodes = filterNodes(nodes)
 
 	// Get the load balancer details and existing rules.
 	lb, err := cs.getLoadBalancer(service)
@@ -169,6 +183,9 @@ func (cs *CSCloud) EnsureLoadBalancer(ctx context.Context, clusterName string, s
 // UpdateLoadBalancer updates hosts under the specified load balancer.
 func (cs *CSCloud) UpdateLoadBalancer(ctx context.Context, clusterName string, service *v1.Service, nodes []*v1.Node) error {
 	klog.V(4).Infof("UpdateLoadBalancer(%v, %v, %v, %v)", clusterName, service.Namespace, service.Name, nodes)
+
+	// Filter out nodes we don't want in the LB
+	nodes = filterNodes(nodes)
 
 	// Get the load balancer details and existing rules.
 	lb, err := cs.getLoadBalancer(service)

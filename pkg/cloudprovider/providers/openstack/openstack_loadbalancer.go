@@ -661,6 +661,17 @@ func getFloatingNetworkIDForLB(client *gophercloud.ServiceClient) (string, error
 // a list of regions (from config) and query/create loadbalancers in
 // each region.
 
+func filterNodes(nodes []*v1.Node) []*v1.Node {
+	out := make([]*v1.Node, 0, len(nodes))
+	for _, n := range nodes {
+		if n.Spec.Unschedulable {
+			continue
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
 // EnsureLoadBalancer creates a new load balancer 'name', or updates the existing one.
 func (lbaas *LbaasV2) EnsureLoadBalancer(ctx context.Context, clusterName string, apiService *v1.Service, nodes []*v1.Node) (*v1.LoadBalancerStatus, error) {
 	klog.V(4).Infof("EnsureLoadBalancer(%v, %v, %v, %v, %v, %v, %v)", clusterName, apiService.Namespace, apiService.Name, apiService.Spec.LoadBalancerIP, apiService.Spec.Ports, nodes, apiService.Annotations)
@@ -668,6 +679,9 @@ func (lbaas *LbaasV2) EnsureLoadBalancer(ctx context.Context, clusterName string
 	if len(nodes) == 0 {
 		return nil, fmt.Errorf("there are no available nodes for LoadBalancer service %s/%s", apiService.Namespace, apiService.Name)
 	}
+
+	// Filter out nodes we don't want in the LB
+	nodes = filterNodes(nodes)
 
 	lbaas.opts.SubnetID = getStringFromServiceAnnotation(apiService, ServiceAnnotationLoadBalancerSubnetID, lbaas.opts.SubnetID)
 	if len(lbaas.opts.SubnetID) == 0 {
@@ -1186,6 +1200,9 @@ func (lbaas *LbaasV2) ensureSecurityGroup(clusterName string, apiService *v1.Ser
 func (lbaas *LbaasV2) UpdateLoadBalancer(ctx context.Context, clusterName string, service *v1.Service, nodes []*v1.Node) error {
 	loadBalancerName := lbaas.GetLoadBalancerName(ctx, clusterName, service)
 	klog.V(4).Infof("UpdateLoadBalancer(%v, %v, %v)", clusterName, loadBalancerName, nodes)
+
+	// Filter out nodes we don't want in the LB
+	nodes = filterNodes(nodes)
 
 	lbaas.opts.SubnetID = getStringFromServiceAnnotation(service, ServiceAnnotationLoadBalancerSubnetID, lbaas.opts.SubnetID)
 	if len(lbaas.opts.SubnetID) == 0 && len(nodes) > 0 {
