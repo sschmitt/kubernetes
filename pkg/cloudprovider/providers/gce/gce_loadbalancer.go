@@ -106,14 +106,7 @@ func (g *Cloud) GetLoadBalancerName(ctx context.Context, clusterName string, svc
 }
 
 func filterNodes(nodes []*v1.Node) []*v1.Node {
-	out := make([]*v1.Node, 0, len(nodes))
-	for _, n := range nodes {
-		if n.Spec.Unschedulable {
-			continue
-		}
-		out = append(out, n)
-	}
-	return out
+	// We do not filter out unschedulable nodes.
 }
 
 // EnsureLoadBalancer is an implementation of LoadBalancer.EnsureLoadBalancer.
