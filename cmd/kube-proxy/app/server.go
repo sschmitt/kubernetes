@@ -30,6 +30,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	v1meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/runtime/serializer/json"
@@ -484,7 +485,7 @@ with the apiserver API to configure the proxy.`,
 }
 
 // ProxyServer represents all the parameters required to start the Kubernetes proxy server. All
-// fields are required.
+// exported fields are required.
 type ProxyServer struct {
 	Client                 clientset.Interface
 	EventClient            v1core.EventsGetter
@@ -509,6 +510,8 @@ type ProxyServer struct {
 	ServiceEventHandler    config.ServiceHandler
 	EndpointsEventHandler  config.EndpointsHandler
 	HealthzServer          *healthcheck.HealthzServer
+
+	healthzFlipper *nodeHealthzFlipper
 }
 
 // createClients creates a kube client and an event client from the given config and masterOverride.
@@ -653,6 +656,7 @@ func (s *ProxyServer) Run() error {
 		}
 	}
 
+	// Make informers that filter out obects that want a non-default service proxy.
 	informerFactory := informers.NewSharedInformerFactoryWithOptions(s.Client, s.ConfigSyncPeriod,
 		informers.WithTweakListOptions(func(options *v1meta.ListOptions) {
 			options.LabelSelector = "!" + apis.LabelServiceProxyName
@@ -674,12 +678,67 @@ func (s *ProxyServer) Run() error {
 	// functions must configure their shared informer event handlers first.
 	go informerFactory.Start(wait.NeverStop)
 
+	// Link healthz to the Node object.
+	if s.HealthzServer != nil {
+		// Make an informer that selects for our nodename.
+		informerFactory = informers.NewSharedInformerFactoryWithOptions(s.Client, s.ConfigSyncPeriod,
+			informers.WithTweakListOptions(func(options *v1meta.ListOptions) {
+				options.FieldSelector = fields.OneTermEqualSelector("metadata.name", s.NodeRef.Name).String()
+			}))
+		nodeConfig := config.NewNodeConfig(informerFactory.Core().V1().Nodes(), s.ConfigSyncPeriod)
+
+		s.healthzFlipper = &nodeHealthzFlipper{
+			healthz: s.HealthzServer,
+			node:    s.NodeRef.Name,
+		}
+		nodeConfig.RegisterEventHandler(s.healthzFlipper)
+
+		go nodeConfig.Run(wait.NeverStop)
+
+		// This has to start after the calls to NewNodeConfig because that must
+		// configure the shared informer event handler first.
+		go informerFactory.Start(wait.NeverStop)
+	}
+
 	// Birth Cry after the birth is successful
 	s.birthCry()
 
 	// Just loop forever for now...
 	s.Proxier.SyncLoop()
 	return nil
+}
+
+type nodeHealthzFlipper struct {
+	healthz *healthcheck.HealthzServer
+	node    string
+}
+
+func (flip *nodeHealthzFlipper) handleNode(node *v1.Node) {
+	if node.Name != flip.node {
+		klog.Infof("node %s is not this node, ignoring", node.Name)
+		return
+	}
+	if node.Spec.Unschedulable {
+		klog.Infof("node is not schedulable, failing healthz")
+		flip.healthz.Pause("node is unschedulable")
+	} else {
+		klog.Infof("node is schedulable, enabling healthz")
+		flip.healthz.Unpause()
+	}
+}
+
+func (flip *nodeHealthzFlipper) OnNodeAdd(node *v1.Node) {
+	flip.handleNode(node)
+}
+
+func (flip *nodeHealthzFlipper) OnNodeUpdate(oldNode, node *v1.Node) {
+	flip.handleNode(node)
+}
+
+func (flip *nodeHealthzFlipper) OnNodeDelete(node *v1.Node) {
+}
+
+func (flip *nodeHealthzFlipper) OnNodeSynced() {
 }
 
 func (s *ProxyServer) birthCry() {

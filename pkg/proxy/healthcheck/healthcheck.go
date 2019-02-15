@@ -249,6 +249,8 @@ func (hcs *server) SyncEndpoints(newEndpoints map[types.NamespacedName]int) erro
 // HealthzUpdater allows callers to update healthz timestamp only.
 type HealthzUpdater interface {
 	UpdateTimestamp()
+	Pause(reason string)
+	Unpause()
 }
 
 // HealthzServer returns 200 "OK" by default. Once timestamp has been
@@ -265,6 +267,7 @@ type HealthzServer struct {
 	recorder      record.EventRecorder
 	nodeRef       *v1.ObjectReference
 
+	paused      string // any non-empty value will cause failed responses
 	lastUpdated atomic.Value
 }
 
@@ -326,6 +329,14 @@ func (hs *HealthzServer) Run() {
 	}, nodeHealthzRetryInterval, wait.NeverStop)
 }
 
+func (hs *HealthzServer) Pause(reason string) {
+	hs.paused = reason
+}
+
+func (hs *HealthzServer) Unpause() {
+	hs.paused = ""
+}
+
 type healthzHandler struct {
 	hs *HealthzServer
 }
@@ -338,10 +349,16 @@ func (h healthzHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	currentTime := h.hs.clock.Now()
 
 	resp.Header().Set("Content-Type", "application/json")
-	if !lastUpdated.IsZero() && currentTime.After(lastUpdated.Add(h.hs.healthTimeout)) {
+	message := ""
+	if h.hs.paused != "" {
+		message = h.hs.paused
+		resp.WriteHeader(http.StatusServiceUnavailable)
+	} else if !lastUpdated.IsZero() && currentTime.After(lastUpdated.Add(h.hs.healthTimeout)) {
+		message = fmt.Sprintf("no heartbeat in %v", h.hs.healthTimeout)
 		resp.WriteHeader(http.StatusServiceUnavailable)
 	} else {
+		message = "healthy"
 		resp.WriteHeader(http.StatusOK)
 	}
-	fmt.Fprintf(resp, fmt.Sprintf(`{"lastUpdated": %q,"currentTime": %q}`, lastUpdated, currentTime))
+	fmt.Fprintf(resp, fmt.Sprintf(`{"message": %q, "lastUpdated": %q, "currentTime": %q}`, message, lastUpdated, currentTime))
 }
