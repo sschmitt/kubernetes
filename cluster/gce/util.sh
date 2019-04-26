@@ -1807,9 +1807,11 @@ function create-static-ip() {
   local attempt=0
   local REGION="$2"
   while true; do
+    local internal_ip_param="--subnet \"${SUBNETWORK}\""
     if gcloud compute addresses create "$1" \
       --project "${PROJECT}" \
-      --region "${REGION}" -q > /dev/null; then
+      --region "${REGION}" \
+      --subnet "${SUBNETWORK}" -q > /dev/null; then
       # successful operation - wait until it's visible
       start="$(date +%s)"
       while true; do
@@ -1891,9 +1893,15 @@ function make-gcloud-network-argument() {
     ret="--network-interface"
     ret="${ret} network=${networkURL}"
     # If address is omitted, instance will not receive an external IP.
-    ret="${ret},address=${address:-}"
+    #if [[ -n ${address:-} ]]; then
+      if [[ "${KUBE_GCE_INTERNAL_IP:-}" == 'true' && -n ${address:-} ]]; then
+        ret="${ret},private-network-ip=${address}"
+      else
+        ret="${ret},address=${address:-}"
+      fi
+    #fi
     ret="${ret},subnet=${subnetURL}"
-    ret="${ret},aliases=pods-default:${alias_size}"
+    ret="${ret},aliases=${alias_size}"
     ret="${ret} --no-can-ip-forward"
   else
     if [[ -n ${subnet:-} ]]; then
@@ -1904,7 +1912,11 @@ function make-gcloud-network-argument() {
 
     ret="${ret} --can-ip-forward"
     if [[ -n ${address:-} ]]; then
-      ret="${ret} --address ${address}"
+      if [[ "${KUBE_GCE_INTERNAL_IP:-}" == 'true' ]]; then
+        ret="${ret} --private-network-ip ${address}"
+      else
+        ret="${ret} --address ${address}"
+      fi
     fi
   fi
 
@@ -2115,7 +2127,7 @@ function kube-up() {
     write-cluster-name
     create-autoscaler-config
     create-master
-    create-nodes-firewall
+    #create-nodes-firewall
     create-nodes-template
     # Windows nodes take longer to boot and setup so create them first.
     create-windows-nodes
