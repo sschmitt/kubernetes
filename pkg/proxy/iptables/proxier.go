@@ -840,6 +840,8 @@ func (proxier *Proxier) syncProxyRules() {
 			)
 			if svcInfo.Port != 0 {
 				args = append(args, "--dport", strconv.Itoa(svcInfo.Port))
+			} else if svcInfo.OnlyNodeLocalEndpoints {
+				args = append(args, "!", "--dport", strconv.Itoa(svcInfo.HealthCheckNodePort))
 			}
 			if proxier.masqueradeAll {
 				writeLine(proxier.natRules, append(args, "-j", string(KubeMarkMasqChain))...)
@@ -911,6 +913,8 @@ func (proxier *Proxier) syncProxyRules() {
 				)
 				if svcInfo.Port != 0 {
 					args = append(args, "--dport", strconv.Itoa(svcInfo.Port))
+				} else if svcInfo.OnlyNodeLocalEndpoints {
+					args = append(args, "!", "--dport", strconv.Itoa(svcInfo.HealthCheckNodePort))
 				}
 
 				// We have to SNAT packets to external IPs.
@@ -965,6 +969,8 @@ func (proxier *Proxier) syncProxyRules() {
 					)
 					if svcInfo.Port != 0 {
 						args = append(args, "--dport", strconv.Itoa(svcInfo.Port))
+					} else if svcInfo.OnlyNodeLocalEndpoints {
+						args = append(args, "!", "--dport", strconv.Itoa(svcInfo.HealthCheckNodePort))
 					}
 					// jump to service firewall chain
 					writeLine(proxier.natRules, append(args, "-j", string(fwChain))...)
